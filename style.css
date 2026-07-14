@@ -1,0 +1,31 @@
+  html,body{margin:0;padding:0;height:100%;overflow:hidden;background:#12100d;color:#e8dcc8;
+    font-family:'Palatino Linotype','Segoe UI','Times New Roman',serif;
+    -webkit-user-select:none;user-select:none;}
+  #topbar{position:fixed;top:0;left:0;right:0;height:52px;display:flex;align-items:center;gap:14px;
+    padding:0 16px;background:linear-gradient(#1d1913,#151210);border-bottom:1px solid #3a2f1e;z-index:5;}
+  #topbar h1{font-size:17px;margin:0;color:#d9b36c;font-weight:normal;letter-spacing:1px;white-space:nowrap;}
+  .tab{padding:7px 16px;border:1px solid #4a3a22;border-radius:4px;background:#221c13;color:#c9b795;
+    cursor:pointer;font-family:inherit;font-size:14px;}
+  .tab.on{background:#5a3d17;color:#ffe6b0;border-color:#8a6a33;}
+  select{background:#221c13;color:#c9b795;border:1px solid #4a3a22;border-radius:4px;padding:5px 6px;
+    font-family:inherit;font-size:13px;}
+  label.sm{font-size:12px;color:#8f8168;margin-left:6px;}
+  #lat{font-size:12px;color:#8f8168;margin-left:auto;white-space:nowrap;}
+  #cv{position:absolute;top:52px;left:0;right:0;bottom:0;display:block;cursor:crosshair;}
+  #hud{position:fixed;left:14px;bottom:12px;background:rgba(18,14,8,.78);border:1px solid #3a2f1e;
+    border-radius:6px;padding:10px 14px;font-size:13px;line-height:1.55;color:#cbbb98;z-index:4;
+    pointer-events:none;min-width:230px;}
+  #hud b{color:#ecd9a8;font-weight:normal;}
+  #help{position:fixed;right:14px;bottom:12px;background:rgba(18,14,8,.82);border:1px solid #3a2f1e;
+    border-radius:6px;padding:10px 16px;font-size:12.5px;line-height:1.6;color:#b6a884;z-index:4;
+    max-width:430px;pointer-events:none;}
+  #help h3{margin:0 0 4px;font-size:13px;color:#d9b36c;font-weight:normal;}
+  #help kbd{background:#2c2416;border:1px solid #4a3a22;border-radius:3px;padding:0 5px;color:#eeddb2;
+    font-family:inherit;font-size:12px;}
+  #overlay{position:fixed;inset:0;background:radial-gradient(ellipse at 50% 40%,#241c10,#0c0a07 75%);
+    display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:20;cursor:pointer;}
+  #overlay h2{font-size:34px;color:#e6c37c;font-weight:normal;letter-spacing:2px;margin:0 0 10px;}
+  #overlay p{color:#9b8a68;font-size:15px;margin:6px 0;}
+  #overlay .go{margin-top:26px;padding:12px 38px;border:1px solid #8a6a33;border-radius:6px;
+    background:#3a2a12;color:#ffe6b0;font-size:17px;letter-spacing:1px;}
+  #err{color:#e07a5f;font-size:13px;max-width:560px;text-align:center;white-space:pre-wrap;}
