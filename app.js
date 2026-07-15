@@ -42,8 +42,8 @@ const NODE_NOTE={1:'C3',2:'C4',3:'G4',4:'C5',5:'E5',6:'G5',8:'C6'};
 const state={
   inst:'bau',
   running:false,
-  bau:{node:4,rodU:0,rodVis:0,rodVisV:0,grip:true,strength:0.7,pos:0.28,
-       rung:false,nhan:false,trem:false,bMod:false,held:new Set(),
+  bau:{node:4,rodU:0,rodVis:0,rodVisV:0,grip:true,strength:0.7,pos:0.13,
+       rung:false,nhan:false,trem:false,bMod:false,roi:false,held:new Set(),
        fingerT:0,fingerFrac:0.75,mx:0.5,my:0.5},
   tranh:{count:16,specs:tranhSpecs(16),pluckPos:0.30,stiff:0.5,
          pressI:-1,pressCents:0,pressStartY:0,lastPluck:-1}
@@ -56,7 +56,7 @@ function send(m){ if(node) node.port.postMessage(m); }
 async function startAudio(sr){
   if(actx){ try{ await actx.close(); }catch(e){} actx=null; node=null; }
   actx=new AudioContext({latencyHint:0,sampleRate:sr});
-  await actx.audioWorklet.addModule('dsp-worklet.js');
+  await actx.audioWorklet.addModule('dsp-worklet.js?v=5');
   node=new AudioWorkletNode(actx,'vn-engine',
     {numberOfInputs:0,numberOfOutputs:1,outputChannelCount:[2]});
   node.connect(actx.destination);
@@ -120,11 +120,14 @@ window.addEventListener('keydown',e=>{
           send({t:'bauRetouch',node:n});
           b.fingerT=1; b.fingerFrac=n>1?1-1/n:0.30;
         }else{
-          b.held.add(e.code);
-          bauPluck(true);                 /* held key = ngón rời staccato */
+          /* normal technique: the touch is released immediately after the
+             pluck so the string rings. Only X (ngón rời) keeps contact. */
+          if(b.roi) b.held.add(e.code);
+          bauPluck(b.roi);
         }
       }
     }else if(e.code==='KeyB'){ b.bMod=true; }
+    else if(e.code==='KeyX'){ b.roi=true; }
     else if(e.code==='KeyT'&&!e.repeat){ b.trem=true; send({t:'bauTrem',on:true}); }
     else if(e.code==='KeyG'&&!e.repeat){ send({t:'bauGiat'}); }
     else if(e.code==='KeyZ'&&!e.repeat){ b.grip=false; send({t:'bauGrip',on:false}); }
@@ -148,6 +151,10 @@ window.addEventListener('keyup',e=>{
       b.held.delete(e.code);
       if(b.held.size===0) send({t:'bauLift'});
     }else if(e.code==='KeyB'){ b.bMod=false; }
+    else if(e.code==='KeyX'){
+      b.roi=false;
+      if(b.held.size){ b.held.clear(); send({t:'bauLift'}); }
+    }
     else if(e.code==='KeyT'){ b.trem=false; send({t:'bauTrem',on:false}); }
     else if(e.code==='KeyZ'){ b.grip=true; send({t:'bauGrip',on:true}); }
     else if(e.code==='Space'){ b.rung=false; send({t:'bauG',g:'rung',on:false}); }
@@ -163,7 +170,7 @@ window.addEventListener('blur',()=>{
   if(b.trem){ b.trem=false; send({t:'bauTrem',on:false}); }
   if(!b.grip){ b.grip=true; send({t:'bauGrip',on:true}); }
   if(b.held.size){ b.held.clear(); send({t:'bauLift'}); }
-  b.bMod=false;
+  b.bMod=false; b.roi=false;
   state.tranh.stiff=0.5;
   releaseTranhPress();
 });
@@ -188,6 +195,11 @@ cv.addEventListener('mousemove',e=>{
       send({t:'tranhPress',i:t.pressI,cents:t.pressCents});
     }
   }
+});
+cv.addEventListener('mouseleave',()=>{
+  /* hand off the rod: ease back to neutral so a parked cursor can't
+     leave everything silently detuned */
+  if(state.inst==='bau'){ state.bau.rodU=0; rodDirty=true; }
 });
 cv.addEventListener('mousedown',e=>{
   if(!state.running) return;
@@ -256,7 +268,7 @@ function updateHelp(){
     h.innerHTML='<h3>Đàn Bầu</h3>'+
       '<kbd>1</kbd>–<kbd>6</kbd> bồi âm C4 G4 C5 E5 G5 C6 &nbsp;·&nbsp; '+
       '<kbd>7</kbd>/<kbd>0</kbd> dây buông C3 &nbsp;·&nbsp; <kbd>click</kbd> gảy lại<br>'+
-      '<b>giữ phím</b> = ngón rời (staccato) &nbsp;·&nbsp; <kbd>B</kbd>+phím = bội âm 2 (retouch)<br>'+
+      '<kbd>X</kbd>+phím = ngón rời (staccato) &nbsp;·&nbsp; <kbd>B</kbd>+phím = bội âm 2 (retouch)<br>'+
       '<kbd>T</kbd> ngón vé (tremolo) &nbsp;·&nbsp; <kbd>G</kbd> giật &nbsp;·&nbsp; '+
       '<kbd>Z</kbd> thả cần (release rod)<br>'+
       'chuột <b>dọc</b>: cần đàn &nbsp;·&nbsp; chuột <b>ngang</b>: lực &amp; vị trí gảy<br>'+

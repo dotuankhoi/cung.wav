@@ -220,7 +220,11 @@ class PString{
 
     const atB=this.rB.read(dB);
     let g=this.gLoop;
-    if(this.nlLoss) g*=1-Math.min(0.0025,this.energy*0.02);
+    /* Loud notes shed a little extra energy. Cap is set by measurement,
+       not by estimate: 5e-4 cost 1.44 dB/s and pulled T60 5.6 -> 4.9 s.
+       1e-4 keeps the effect audible-in-principle without moving T60 off
+       the recordings' 5.5 s. */
+    if(this.nlLoss) g*=1-Math.min(0.0001,this.energy*0.0008);
     /* sustained touch (ngón rời): the palm has width, so it absorbs
        broadband — even the partials with a node at the touch point.
        Loss scales with touch pressure. */
