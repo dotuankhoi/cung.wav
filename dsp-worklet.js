@@ -112,6 +112,8 @@ class PString{
     this.d=180; this.dTarget=180;
     this.kD=1-Math.exp(-1/(0.0035*FS));
     this.fingerR=0; this.fingerDecay=1;
+    this.fingerFloor=0;   /* sustained touch pressure (ngón rời staccato) */
+    this.nlLoss=false;    /* amplitude-dependent loop loss (đàn bầu) */
     this.excI=1; this.excN=0; this.excLife=0;
     this.excAmp=0; this.excAngle=0.3; this.excSkew=1;
     this.excLP=new LP1(); this.excLP.set(6000);
@@ -209,14 +211,21 @@ class PString{
       const rho=-R/(R+2), tau=1+rho;
       toB=tau*aJ+rho*bJ;
       toA=tau*bJ+rho*aJ;
-      this.fingerR*=this.fingerDecay;
+      this.fingerR=this.fingerFloor+(this.fingerR-this.fingerFloor)*this.fingerDecay;
     }else{
       toB=aJ; toA=bJ;
+      if(this.fingerFloor>1e-4) this.fingerR=this.fingerFloor;
     }
     toB+=e;    /* one-directional: pick sits between touch point and bridge */
 
     const atB=this.rB.read(dB);
-    let refl=-this.gLoop*this.bLP.pro(atB);
+    let g=this.gLoop;
+    if(this.nlLoss) g*=1-Math.min(0.0025,this.energy*0.02);
+    /* sustained touch (ngón rời): the palm has width, so it absorbs
+       broadband — even the partials with a node at the touch point.
+       Loss scales with touch pressure. */
+    if(this.fingerFloor>1e-4) g*=1-0.43*this.fingerFloor;
+    let refl=-g*this.bLP.pro(atB);
     refl=this.ap2.pro(this.ap1.pro(refl));
     const atN=this.lA.read(dA);
     const nr=-0.998*this.nLP.pro(atN);
@@ -298,10 +307,14 @@ class BauEngine{
     s.ap1.a=-0.03; s.ap2.a=-0.03;          /* measured B ≈ 0 */
     s.pickupOn=true; s.puAbs=0.985;        /* under-bridge pickup: strong k-tilt */
     s.jpos=0.5;
+    s.nlLoss=true;                         /* louder notes shed energy faster */
     s.retune();
     this.s=s;
     this.node=4;
     this.rodU=0; this.rodSm=0;
+    this.grip=true; this.rodV=0;           /* rod held vs released (springs free) */
+    this.tremOn=false; this.tremT=0; this.tremStroke=false; this.lastPos=0.13;
+    this.giT=-1;                           /* giật (bend-jerk) envelope clock */
     this.scoop=0;
     this.gest={rungOn:false,rungAmp:0,ph:0,rate:5.5,jit:0,nhanOn:false,nx:0,nv:0};
     this.rev=new Reverb();
@@ -332,33 +345,49 @@ class BauEngine{
     this.oL=0; this.oR=0;
     this.blockActive=false;
   }
-  pluck(node,vel,pos){
-    const s=this.s, n=node;
-    this.node=n;
-    /* touch node measured from the bridge; slight touch-placement variance */
-    s.jpos = n>1 ? clamp(1-1/n+(Math.random()-0.5)*0.008,0.1,0.9) : 0.30;
-    /* pick lands between touch point and bridge; scaling with the node
-       puts the position-comb notch just above the note's 3rd partial,
-       which builds the measured cliff (H4 down at ~-39 dB) */
-    const nn=n>1?n:1;
-    const p=clamp((0.28/nn)*(pos/0.13)*(0.94+Math.random()*0.12),0.02,0.5);
-    s.pluck(vel,p,0.6,0.35,n, n>1?0.9+0.9*vel:0.25);
-    /* voice the excitation around the SOUNDING note: two poles at
-       ~3.2x note give the measured cliff (H3 −14 dB, H4 −39 dB) */
-    s.normHarm = n>1 ? n : 1;
-    const noteF=s.baseF*s.normHarm;
-    /* pick contact must be short relative to the SOUNDING period, or the
-       pulse spectrum nulls the note's own upper partials */
-    /* contact just under half the sounding period: the Hann pulse's
-       spectral null lands near the note's 4th partial (H3 ~ -13 dB,
-       H4 ~ -31 dB from the pulse shape alone) */
+  voice(nn){
+    /* excitation voicing around the SOUNDING note (calibrated against the
+       recordings): contact just under half the sounding period puts the
+       Hann pulse's spectral null near the 4th partial; two poles at 4.5x
+       note plus the fixed amp EQ do the rest */
+    const s=this.s;
+    s.normHarm=nn;
+    const noteF=s.baseF*nn;
     s.excN=Math.max(4,Math.round(FS/(noteF*3.2)));
     s.excLife=s.excN+Math.ceil(s.combPD+s.combHD)+8;
     s.excLP.set(clamp(4.5*noteF,600,16000));
     s.excLP2.set(clamp(4.5*noteF,600,16000));
     s.excLP2.y=0;
+  }
+  pluck(node,vel,pos,hold){
+    const s=this.s, n=node, nn=n>1?n:1;
+    this.node=n; this.lastPos=pos;
+    /* touch node measured from the bridge; slight touch-placement variance */
+    s.jpos = n>1 ? clamp(1-1/n+(Math.random()-0.5)*0.008,0.1,0.9) : 0.30;
+    /* pick lands between touch point and bridge; scaling with the node
+       puts the position-comb notch just above the note's 3rd partial */
+    const p=clamp((0.28/nn)*(pos/0.13)*(0.94+Math.random()*0.12),0.02,0.5);
+    s.pluck(vel,p,0.6,0.35,n, n>1?0.9+0.9*vel:0.35);
+    /* ngón rời: while the key is held the touch stays on the string and
+       chokes the note; releasing lifts the finger and lets it ring */
+    s.fingerFloor = hold ? 0.35 : 0;
+    this.voice(nn);
     this.scoop=-(3+Math.random()*8);
   }
+  lift(){ this.s.fingerFloor=0; }
+  retouch(node){
+    /* ngón bội âm 2: silent retouch of a node on the ringing string —
+       partials without a node there are absorbed, the rest survive */
+    const s=this.s, n=node, nn=n>1?n:1;
+    this.node=n;
+    s.jpos = n>1 ? clamp(1-1/n+(Math.random()-0.5)*0.008,0.1,0.9) : 0.30;
+    s.fingerR=Math.max(s.fingerR,1.3);
+    s.fingerDecay=Math.exp(-1/((0.06+Math.random()*0.04)*FS));
+    s.fingerFloor=0;
+    s.normHarm=nn;
+    s.active=true; s.qb=0;
+  }
+  giat(){ this.giT=0; }
   vo(){
     this.s.damp(2.6,55);
     this.s.pluck(0.28,0.5,0.3,0.8,this.node,2.6);
@@ -369,12 +398,23 @@ class BauEngine{
       if(++s.qb>40) s.active=false;
     }else s.qb=0;
 
-    this.rodSm+=0.10*(this.rodU-this.rodSm);
+    if(this.grip){
+      this.rodSm+=0.10*(this.rodU-this.rodSm);
+      this.rodV=0;
+    }else{
+      /* released rod: springs back to neutral, underdamped — a decaying
+         pitch warble as the horn oscillates */
+      const dt=BLK/FS, w=TAU*3.8, z=0.18;
+      this.rodV+=(-w*w*this.rodSm-2*z*w*this.rodV)*dt;
+      this.rodSm+=this.rodV*dt;
+    }
     const u=this.rodSm;
     /* rod stiffness rises toward the extremes: tanh-compressed travel,
-       asymmetric range (pulling lowers pitch further than pushing raises) */
-    const bend = u>=0 ? 330*Math.tanh(1.45*u)/0.8957
+       ±4–5 semitone range, pull slightly deeper than push */
+    const bend = u>=0 ? 480*Math.tanh(1.50*u)/0.9051
                       : 520*Math.tanh(1.65*u)/0.9289;
+    /* a held rod hand also damps the string slightly */
+    this.s.t60 = this.grip ? 5.5 : 6.4;
     const G=this.gest;
     G.rungAmp += G.rungOn ? this.kA*(1-G.rungAmp) : -this.kR*G.rungAmp;
     let g=0;
@@ -391,6 +431,27 @@ class BauEngine{
     G.nv+=(w0*w0*(tgt-G.nx)-2*zz*w0*G.nv)*dt;
     G.nx+=G.nv*dt;
     g+=G.nx;
+    /* giật: fast forceful bend-and-release jerk */
+    if(this.giT>=0){
+      const t=this.giT;
+      g+=170*(t<0.05 ? t/0.05 : Math.exp(-(t-0.05)/0.09));
+      this.giT+=dt;
+      if(this.giT>0.6) this.giT=-1;
+    }
+    /* ngón vé: rapid re-plucking with the touch kept on the node */
+    if(this.tremOn){
+      this.tremT-=BLK;
+      if(this.tremT<=0){
+        this.tremT=FS/(9.5+Math.random()*3);
+        this.tremStroke=!this.tremStroke;
+        const n=this.node, nn=n>1?n:1;
+        const p=clamp((0.28/nn)*(this.lastPos/0.13),0.02,0.5);
+        this.s.pluck(clamp(0.3+Math.random()*0.18,0,1),p,0.7,
+                     this.tremStroke?0.2:0.6,n,0.6);
+        this.s.fingerFloor=0.15;   /* light ngón vé touch: notes bleed */
+        this.voice(nn);
+      }
+    }
     this.scoop*=0.84;
     s.centsExtra=bend+g+this.scoop;
     s.retune();
@@ -556,7 +617,15 @@ class Engine extends AudioWorkletProcessor{
   onMsg(m){
     const b=this.bau, t=this.tranh;
     switch(m.t){
-      case 'bauPluck': b.pluck(m.node,m.vel,m.pos); break;
+      case 'bauPluck': b.pluck(m.node,m.vel,m.pos,!!m.hold); break;
+      case 'bauLift':  b.lift(); break;
+      case 'bauRetouch': b.retouch(m.node); break;
+      case 'bauTrem':  b.tremOn=!!m.on; if(!m.on) b.s.fingerFloor=0; break;
+      case 'bauGiat':  b.giat(); break;
+      case 'bauGrip':
+        b.grip=!!m.on;
+        if(b.grip) b.rodV=0;
+        break;
       case 'bauRod':   b.rodU=clamp(m.v,-1,1); break;
       case 'bauG':
         if(m.g==='rung') b.gest.rungOn=!!m.on;

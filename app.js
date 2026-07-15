@@ -34,10 +34,16 @@ const TRANH_CODES=['KeyZ','KeyX','KeyC','KeyV','KeyB','KeyN','KeyM','Comma','Per
   'KeyA','KeyS','KeyD','KeyF','KeyG','KeyH','KeyJ','KeyK','KeyL','Semicolon','Quote'];
 const TRANH_LABELS=['Z','X','C','V','B','N','M',',','.','/','A','S','D','F','G','H','J','K','L',';','\''];
 
+/* đàn bầu nodes actually used by players: ½ ⅓ ¼ ⅕ ⅙ ⅛ (1/7 is avoided);
+   keys 7 and 0 play the open string */
+const NODE_KEYS={Digit1:2,Digit2:3,Digit3:4,Digit4:5,Digit5:6,Digit6:8,Digit7:1,Digit0:1};
+const NODE_NOTE={1:'C3',2:'C4',3:'G4',4:'C5',5:'E5',6:'G5',8:'C6'};
+
 const state={
   inst:'bau',
   running:false,
-  bau:{node:4,rodU:0,rodVis:0,strength:0.7,pos:0.28,rung:false,nhan:false,
+  bau:{node:4,rodU:0,rodVis:0,rodVisV:0,grip:true,strength:0.7,pos:0.28,
+       rung:false,nhan:false,trem:false,bMod:false,held:new Set(),
        fingerT:0,fingerFrac:0.75,mx:0.5,my:0.5},
   tranh:{count:16,specs:tranhSpecs(16),pluckPos:0.30,stiff:0.5,
          pressI:-1,pressCents:0,pressStartY:0,lastPluck:-1}
@@ -66,13 +72,16 @@ function sendTranhCfg(){
 }
 
 /* ------------------------------------------------------------------ */
-function bauPluck(){
+function bauPluck(hold){
   const b=state.bau;
   const vel=clamp(b.strength*(0.9+Math.random()*0.2),0.05,1);
-  send({t:'bauPluck',node:b.node,vel,pos:b.pos});
-  b.fingerT=1;
-  b.fingerFrac=b.node>1?1-1/b.node:0.3;
-  visBauPluck(1-b.pos,vel);
+  setTimeout(function(){                 /* ±10 ms human timing scatter */
+    send({t:'bauPluck',node:b.node,vel,pos:b.pos,hold:!!hold});
+    b.fingerT=1;
+    b.fingerFrac=b.node>1?1-1/b.node:0.30;
+    const nn=Math.max(1,b.node);
+    visBauPluck(1-Math.min(0.5,(0.28/nn)*(b.pos/0.13)),vel);
+  },Math.random()*10);
 }
 function tranhPluck(i){
   const t=state.tranh;
@@ -102,15 +111,29 @@ window.addEventListener('keydown',e=>{
   if(!state.running) return;
   if(e.code==='Space'){ e.preventDefault(); }
   if(state.inst==='bau'){
-    if(e.code.startsWith('Digit')){
-      const k=parseInt(e.code.slice(5),10);
-      if(k>=1&&k<=7&&!e.repeat){ state.bau.node=k+1; bauPluck(); }
-    }else if(e.code==='Space'&&!e.repeat){
-      state.bau.rung=true; send({t:'bauG',g:'rung',on:true});
+    const b=state.bau;
+    if(NODE_KEYS[e.code]!==undefined){
+      if(!e.repeat){
+        const n=NODE_KEYS[e.code];
+        b.node=n;
+        if(b.bMod){                       /* ngón bội âm 2: silent retouch */
+          send({t:'bauRetouch',node:n});
+          b.fingerT=1; b.fingerFrac=n>1?1-1/n:0.30;
+        }else{
+          b.held.add(e.code);
+          bauPluck(true);                 /* held key = ngón rời staccato */
+        }
+      }
+    }else if(e.code==='KeyB'){ b.bMod=true; }
+    else if(e.code==='KeyT'&&!e.repeat){ b.trem=true; send({t:'bauTrem',on:true}); }
+    else if(e.code==='KeyG'&&!e.repeat){ send({t:'bauGiat'}); }
+    else if(e.code==='KeyZ'&&!e.repeat){ b.grip=false; send({t:'bauGrip',on:false}); }
+    else if(e.code==='Space'&&!e.repeat){
+      b.rung=true; send({t:'bauG',g:'rung',on:true});
     }else if((e.code==='ShiftLeft'||e.code==='ShiftRight')&&!e.repeat){
-      state.bau.nhan=true; send({t:'bauG',g:'nhan',on:true});
+      b.nhan=true; send({t:'bauG',g:'nhan',on:true});
     }else if(e.code==='KeyV'&&!e.repeat){
-      send({t:'bauVo'}); visBauPluck(0.5,0.25); state.bau.fingerT=1;
+      send({t:'bauVo'}); visBauPluck(0.5,0.25); b.fingerT=1;
     }
   }else{
     const idx=TRANH_CODES.indexOf(e.code);
@@ -120,15 +143,27 @@ window.addEventListener('keydown',e=>{
 });
 window.addEventListener('keyup',e=>{
   if(state.inst==='bau'){
-    if(e.code==='Space'){ state.bau.rung=false; send({t:'bauG',g:'rung',on:false}); }
+    const b=state.bau;
+    if(NODE_KEYS[e.code]!==undefined){
+      b.held.delete(e.code);
+      if(b.held.size===0) send({t:'bauLift'});
+    }else if(e.code==='KeyB'){ b.bMod=false; }
+    else if(e.code==='KeyT'){ b.trem=false; send({t:'bauTrem',on:false}); }
+    else if(e.code==='KeyZ'){ b.grip=true; send({t:'bauGrip',on:true}); }
+    else if(e.code==='Space'){ b.rung=false; send({t:'bauG',g:'rung',on:false}); }
     else if(e.code==='ShiftLeft'||e.code==='ShiftRight'){
-      state.bau.nhan=false; send({t:'bauG',g:'nhan',on:false});
+      b.nhan=false; send({t:'bauG',g:'nhan',on:false});
     }
   }else if(e.code==='ShiftLeft'||e.code==='ShiftRight'){ state.tranh.stiff=0.5; }
 });
 window.addEventListener('blur',()=>{
-  if(state.bau.rung){ state.bau.rung=false; send({t:'bauG',g:'rung',on:false}); }
-  if(state.bau.nhan){ state.bau.nhan=false; send({t:'bauG',g:'nhan',on:false}); }
+  const b=state.bau;
+  if(b.rung){ b.rung=false; send({t:'bauG',g:'rung',on:false}); }
+  if(b.nhan){ b.nhan=false; send({t:'bauG',g:'nhan',on:false}); }
+  if(b.trem){ b.trem=false; send({t:'bauTrem',on:false}); }
+  if(!b.grip){ b.grip=true; send({t:'bauGrip',on:true}); }
+  if(b.held.size){ b.held.clear(); send({t:'bauLift'}); }
+  b.bMod=false;
   state.tranh.stiff=0.5;
   releaseTranhPress();
 });
@@ -219,11 +254,13 @@ function updateHelp(){
   const h=$('help');
   if(state.inst==='bau'){
     h.innerHTML='<h3>Đàn Bầu</h3>'+
-      '<kbd>1</kbd>–<kbd>7</kbd> gảy tại nút bồi âm (harmonics 2–8) &nbsp;·&nbsp; '+
-      '<kbd>click</kbd> gảy lại<br>'+
-      'chuột <b>dọc</b>: cần đàn (uốn cao/thấp) &nbsp;·&nbsp; chuột <b>ngang</b>: lực &amp; vị trí gảy<br>'+
-      '<kbd>Space</kbd> rung (vibrato) &nbsp;·&nbsp; <kbd>Shift</kbd> nhấn (press) &nbsp;·&nbsp; '+
-      '<kbd>V</kbd> vỗ (tap)';
+      '<kbd>1</kbd>–<kbd>6</kbd> bồi âm C4 G4 C5 E5 G5 C6 &nbsp;·&nbsp; '+
+      '<kbd>7</kbd>/<kbd>0</kbd> dây buông C3 &nbsp;·&nbsp; <kbd>click</kbd> gảy lại<br>'+
+      '<b>giữ phím</b> = ngón rời (staccato) &nbsp;·&nbsp; <kbd>B</kbd>+phím = bội âm 2 (retouch)<br>'+
+      '<kbd>T</kbd> ngón vé (tremolo) &nbsp;·&nbsp; <kbd>G</kbd> giật &nbsp;·&nbsp; '+
+      '<kbd>Z</kbd> thả cần (release rod)<br>'+
+      'chuột <b>dọc</b>: cần đàn &nbsp;·&nbsp; chuột <b>ngang</b>: lực &amp; vị trí gảy<br>'+
+      '<kbd>Space</kbd> rung &nbsp;·&nbsp; <kbd>Shift</kbd> nhấn &nbsp;·&nbsp; <kbd>V</kbd> vỗ';
   }else{
     h.innerHTML='<h3>Đàn Tranh</h3>'+
       'phím <kbd>Z</kbd>…<kbd>/</kbd> rồi <kbd>A</kbd>…<kbd>\'</kbd> gảy dây (thấp → cao)<br>'+
@@ -518,16 +555,25 @@ function drawBau(){
   }
   drawStringPath(bauPts.subarray(0,n*2),bauV.env*3,'#d8dde2','rgba(10,10,12,0.8)',1.5);
 
-  /* harmonic node markers 1–7 (harmonics 2–8) */
+  /* harmonic node markers: keys 1–6 = nodes ½ ⅓ ¼ ⅕ ⅙ ⅛ (1/7 skipped) */
   ctx.textAlign='center'; ctx.font='12px "Palatino Linotype","Segoe UI",serif';
-  for(let h=2;h<=8;h++){
-    const fx=1-1/h, x=lerp(ax+10,x1,fx);
+  const NODES=[[2,'1'],[3,'2'],[4,'3'],[5,'4'],[6,'5'],[8,'6']];
+  for(let k=0;k<NODES.length;k++){
+    const h=NODES[k][0], fx=1-1/h, x=lerp(ax+10,x1,fx);
     const active=b.node===h;
     ctx.fillStyle=active?'#ffd98a':'rgba(200,170,110,0.45)';
     ctx.beginPath();
     ctx.moveTo(x,B.sy+9); ctx.lineTo(x+3.4,B.sy+14); ctx.lineTo(x,B.sy+19); ctx.lineTo(x-3.4,B.sy+14);
     ctx.closePath(); ctx.fill();
-    ctx.fillText(String(h-1),x,B.sy+33);
+    ctx.fillText(NODES[k][1],x,B.sy+33);
+  }
+  if(b.node===1){                        /* open-string indicator */
+    ctx.fillStyle='#ffd98a';
+    ctx.fillText('dây buông',ax+52,B.sy+33);
+  }
+  if(!b.grip){                           /* released rod tag */
+    ctx.fillStyle='rgba(255,217,138,0.8)';
+    ctx.fillText('thả cần',B.rodX+tipDx,B.rodTopY-10);
   }
   /* touching finger */
   if(b.fingerT>0.01){
@@ -593,13 +639,16 @@ function updateHUD(){
   const h=$('hud');
   if(state.inst==='bau'){
     const b=state.bau,u=b.rodVis;
-    const bend=u>=0?330*Math.tanh(1.45*u)/0.8957:520*Math.tanh(1.65*u)/0.9289;
-    const f=130.813*Math.pow(2,bend/1200)*b.node;
+    const bend=u>=0?480*Math.tanh(1.50*u)/0.9051:520*Math.tanh(1.65*u)/0.9289;
+    const f=130.813*Math.pow(2,bend/1200)*Math.max(1,b.node);
     h.innerHTML='<b>Đàn Bầu</b><br>'+
-      'bồi âm: <b>'+(b.node>1?(b.node)+'×f₀':'dây buông')+'</b> ≈ '+f.toFixed(1)+' Hz<br>'+
-      'cần đàn: <b>'+(bend>=0?'+':'')+bend.toFixed(0)+' cents</b><br>'+
+      'nốt: <b>'+(b.node>1?NODE_NOTE[b.node]+' ('+b.node+'×f₀)':'dây buông C3')+
+      '</b> ≈ '+f.toFixed(1)+' Hz<br>'+
+      'cần đàn: <b>'+(bend>=0?'+':'')+bend.toFixed(0)+' cents</b>'+
+      (b.grip?'':' · <b>thả cần</b>')+'<br>'+
       'gảy: lực '+(b.strength*100|0)+'% · vị trí '+(b.pos*100|0)+'%<br>'+
-      (b.rung?'<b>rung</b> ':'')+(b.nhan?'<b>nhấn</b>':'');
+      (b.rung?'<b>rung</b> ':'')+(b.nhan?'<b>nhấn</b> ':'')+
+      (b.trem?'<b>ngón vé</b> ':'')+(b.held.size?'<b>ngón rời</b>':'');
   }else{
     const t=state.tranh;
     let s='<b>Đàn Tranh</b> — '+t.count+' dây<br>'+
@@ -626,8 +675,16 @@ function frame(now){
     acc-=STEP; n++;
   }
   const b=state.bau;
-  b.rodVis+=0.16*(b.rodU-b.rodVis);
-  if(b.fingerT>0) b.fingerT*=0.97;
+  if(b.grip){
+    b.rodVis+=0.16*(b.rodU-b.rodVis);
+    b.rodVisV=0;
+  }else{
+    const w=TAU*3.8, z=0.18, sdt=1/60;
+    b.rodVisV+=(-w*w*b.rodVis-2*z*w*b.rodVisV)*sdt;
+    b.rodVis+=b.rodVisV*sdt;
+  }
+  if(b.held.size>0) b.fingerT=1;
+  else if(b.fingerT>0) b.fingerT*=0.97;
   if(rodDirty&&state.running){ send({t:'bauRod',v:b.rodU}); rodDirty=false; }
   if(W>0){
     if(state.inst==='bau') drawBau(); else drawTranh();
