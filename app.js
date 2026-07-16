@@ -42,7 +42,7 @@ const NODE_NOTE={1:'C3',2:'C4',3:'G4',4:'C5',5:'E5',6:'G5',8:'C6'};
 const state={
   inst:'bau',
   running:false,
-  bau:{node:4,rodU:0,rodVis:0,rodVisV:0,grip:true,strength:0.7,pos:0.13,
+  bau:{node:4,rodU:0,rodVis:0,rodVisV:0,grip:true,xCtl:0.57,strength:0.7,pos:0.13,
        rung:false,nhan:false,trem:false,bMod:false,roi:false,held:new Set(),
        fingerT:0,fingerFrac:0.75,mx:0.5,my:0.5},
   tranh:{count:16,specs:tranhSpecs(16),pluckPos:0.30,stiff:0.5,
@@ -56,7 +56,7 @@ function send(m){ if(node) node.port.postMessage(m); }
 async function startAudio(sr){
   if(actx){ try{ await actx.close(); }catch(e){} actx=null; node=null; }
   actx=new AudioContext({latencyHint:0,sampleRate:sr});
-  await actx.audioWorklet.addModule('dsp-worklet.js?v=5');
+  await actx.audioWorklet.addModule('dsp-worklet.js?v=6');
   node=new AudioWorkletNode(actx,'vn-engine',
     {numberOfInputs:0,numberOfOutputs:1,outputChannelCount:[2]});
   node.connect(actx.destination);
@@ -183,9 +183,8 @@ cv.addEventListener('mousemove',e=>{
   if(state.inst==='bau'){
     const b=state.bau;
     b.mx=xN; b.my=yN;
+    /* mouse is the rod hand only; pluck strength/position live on the wheel */
     b.rodU=clamp((0.5-yN)*2.4,-1,1);
-    b.strength=0.30+0.70*xN;
-    b.pos=0.20-0.14*xN;   /* đàn bầu is picked close to the bridge (measured H2≈H1) */
     rodDirty=true;
   }else{
     const t=state.tranh;
@@ -232,7 +231,13 @@ cv.addEventListener('dblclick',e=>{
 });
 cv.addEventListener('wheel',e=>{
   e.preventDefault();
-  if(state.inst==='tranh'){
+  if(state.inst==='bau'){
+    /* scroll up = harder pluck, closer to the bridge (louder + brighter) */
+    const b=state.bau;
+    b.xCtl=clamp(b.xCtl-e.deltaY*0.0006,0,1);
+    b.strength=0.30+0.70*b.xCtl;
+    b.pos=0.20-0.14*b.xCtl;
+  }else{
     const t=state.tranh;
     t.pluckPos=clamp(t.pluckPos+e.deltaY*0.0004,0.08,0.5);
   }
@@ -271,7 +276,7 @@ function updateHelp(){
       '<kbd>X</kbd>+phím = ngón rời (staccato) &nbsp;·&nbsp; <kbd>B</kbd>+phím = bội âm 2 (retouch)<br>'+
       '<kbd>T</kbd> ngón vé (tremolo) &nbsp;·&nbsp; <kbd>G</kbd> giật &nbsp;·&nbsp; '+
       '<kbd>Z</kbd> thả cần (release rod)<br>'+
-      'chuột <b>dọc</b>: cần đàn &nbsp;·&nbsp; chuột <b>ngang</b>: lực &amp; vị trí gảy<br>'+
+      'chuột <b>dọc</b>: cần đàn &nbsp;·&nbsp; <b>lăn chuột</b>: lực &amp; vị trí gảy<br>'+
       '<kbd>Space</kbd> rung &nbsp;·&nbsp; <kbd>Shift</kbd> nhấn &nbsp;·&nbsp; <kbd>V</kbd> vỗ';
   }else{
     h.innerHTML='<h3>Đàn Tranh</h3>'+
