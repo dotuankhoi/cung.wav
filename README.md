@@ -28,6 +28,20 @@ your browser. Then click the start screen and play.
 - **Đàn tranh** — keys Z…/ then A…' pluck 16/17/19/21 strings, drag down on a
   string for microtonal press bends, scroll = pluck position, Shift = hard pick.
 
+## A/B comparison
+
+`compare.html` plays the current build side by side with the
+recording-calibrated GitHub version (commit `5d8afe9`). The old build is
+served from `versions/github-tuned/` (not committed); regenerate it with:
+
+```powershell
+git archive -o "$env:TEMP\tuned.zip" 5d8afe9
+Expand-Archive -Force "$env:TEMP\tuned.zip" versions\github-tuned
+```
+
+Then open http://localhost:8471/compare.html — click each side once to
+start its audio, and click again to give it keyboard focus.
+
 ## Measurement-driven voicing
 
 The đàn bầu is calibrated against DSP analysis of solo recordings by

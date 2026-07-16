@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Đàn Bầu — A/B so sánh phiên bản</title>
+<style>
+  html,body{margin:0;height:100%;background:#0d0b08;color:#e8dcc8;overflow:hidden;
+    font-family:'Palatino Linotype','Segoe UI',serif;}
+  #bar{height:44px;display:flex;align-items:center;gap:18px;padding:0 16px;
+    background:#1d1913;border-bottom:1px solid #3a2f1e;font-size:13.5px;color:#b6a884;}
+  #bar b{color:#d9b36c;}
+  .cols{display:flex;height:calc(100% - 44px);}
+  .col{flex:1;display:flex;flex-direction:column;min-width:0;}
+  .col h2{margin:0;padding:8px 14px;font-size:14px;font-weight:normal;letter-spacing:1px;}
+  .col.now h2{background:#26361f;color:#cde6b0;border-bottom:1px solid #4a6a33;}
+  .col.old h2{background:#36261f;color:#e6c3b0;border-bottom:1px solid #6a4a33;}
+  .col iframe{flex:1;border:0;width:100%;}
+  .divider{width:2px;background:#3a2f1e;}
+</style>
+</head>
+<body>
+<div id="bar">
+  <b>A/B so sánh</b>
+  <span>Nhấp vào một bên để bắt đầu audio của bên đó, rồi nhấp lại để lấy focus bàn phím — phím chỉ tới bên đang có focus.</span>
+</div>
+<div class="cols">
+  <div class="col now">
+    <h2>BẢN HIỆN TẠI — gestures + fixes (local)</h2>
+    <iframe src="index.html" allow="autoplay"></iframe>
+  </div>
+  <div class="divider"></div>
+  <div class="col old">
+    <h2>BẢN GITHUB — recording-calibrated 5d8afe9 (14/7)</h2>
+    <iframe src="versions/github-tuned/index.html" allow="autoplay"></iframe>
+  </div>
+</div>
+</body>
+</html>
