@@ -43,7 +43,7 @@ const state={
   inst:'bau',
   running:false,
   bau:{node:4,rodU:0,rodVis:0,rodVisV:0,grip:true,xCtl:0.57,strength:0.7,pos:0.13,
-       rung:false,nhan:false,trem:false,bMod:false,roi:false,held:new Set(),
+       rung:false,nhan:false,trem:false,bMod:false,roi:false,held:new Set(),resetSerial:0,
        fingerT:0,fingerFrac:0.75,mx:0.5,my:0.5},
   tranh:{count:16,specs:tranhSpecs(16),pluckPos:0.30,stiff:0.5,
          pressI:-1,pressCents:0,pressStartY:0,lastPluck:-1}
@@ -56,7 +56,7 @@ function send(m){ if(node) node.port.postMessage(m); }
 async function startAudio(sr){
   if(actx){ try{ await actx.close(); }catch(e){} actx=null; node=null; }
   actx=new AudioContext({latencyHint:0,sampleRate:sr});
-  await actx.audioWorklet.addModule('dsp-worklet.js?v=6');
+  await actx.audioWorklet.addModule('dsp-worklet.js?v=7');
   node=new AudioWorkletNode(actx,'vn-engine',
     {numberOfInputs:0,numberOfOutputs:1,outputChannelCount:[2]});
   node.connect(actx.destination);
@@ -74,9 +74,10 @@ function sendTranhCfg(){
 /* ------------------------------------------------------------------ */
 function bauPluck(hold){
   const b=state.bau;
+  const serial=b.resetSerial;
   const vel=clamp(b.strength*(0.9+Math.random()*0.2),0.05,1);
   setTimeout(function(){                 /* ±10 ms human timing scatter */
-    send({t:'bauPluck',node:b.node,vel,pos:b.pos,hold:!!hold});
+    send({t:'bauPluck',node:b.node,vel,pos:b.pos,hold:!!hold&&serial===b.resetSerial});
     b.fingerT=1;
     b.fingerFrac=b.node>1?1-1/b.node:0.30;
     const nn=Math.max(1,b.node);
@@ -107,7 +108,22 @@ function resize(){
 window.addEventListener('resize',resize);
 
 /* ---------------- input: keyboard ---------------- */
+function centerRod(){
+  if(state.inst!=='bau') return;
+  const b=state.bau;
+  b.resetSerial++;
+  b.rodU=0; b.rodVisV=0; b.my=0.5; b.grip=true;
+  b.rung=false; b.nhan=false; b.trem=false; b.bMod=false; b.roi=false;
+  b.held.clear(); b.fingerT=0;
+  rodDirty=false;
+  send({t:'bauCenter'});
+}
 window.addEventListener('keydown',e=>{
+  if(e.code==='Escape'&&state.inst==='bau'){
+    e.preventDefault();
+    if(!e.repeat) centerRod();
+    return;
+  }
   if(!state.running) return;
   if(e.code==='Space'){ e.preventDefault(); }
   if(state.inst==='bau'){
@@ -250,11 +266,13 @@ function setInst(which){
   $('tabBau').classList.toggle('on',which==='bau');
   $('tabTranh').classList.toggle('on',which==='tranh');
   $('selCount').style.visibility=which==='tranh'?'visible':'hidden';
+  $('centerRod').hidden=which!=='bau';
   releaseTranhPress();
   buildBG(); updateHelp();
 }
 $('tabBau').onclick=()=>setInst('bau');
 $('tabTranh').onclick=()=>setInst('tranh');
+$('centerRod').onclick=centerRod;
 $('selCount').onchange=()=>{
   const c=parseInt($('selCount').value,10);
   state.tranh.count=c;
@@ -277,7 +295,8 @@ function updateHelp(){
       '<kbd>T</kbd> ngón vé (tremolo) &nbsp;·&nbsp; <kbd>G</kbd> giật &nbsp;·&nbsp; '+
       '<kbd>Z</kbd> thả cần (release rod)<br>'+
       'chuột <b>dọc</b>: cần đàn &nbsp;·&nbsp; <b>lăn chuột</b>: lực &amp; vị trí gảy<br>'+
-      '<kbd>Space</kbd> rung &nbsp;·&nbsp; <kbd>Shift</kbd> nhấn &nbsp;·&nbsp; <kbd>V</kbd> vỗ';
+      '<kbd>Space</kbd> rung &nbsp;·&nbsp; <kbd>Shift</kbd> nhấn &nbsp;·&nbsp; <kbd>V</kbd> vỗ<br>'+
+      '<kbd>Esc</kbd> Center rod — về cao độ gốc, dừng kỹ thuật';
   }else{
     h.innerHTML='<h3>Đàn Tranh</h3>'+
       'phím <kbd>Z</kbd>…<kbd>/</kbd> rồi <kbd>A</kbd>…<kbd>\'</kbd> gảy dây (thấp → cao)<br>'+

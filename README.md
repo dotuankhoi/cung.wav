@@ -24,7 +24,9 @@ your browser. Then click the start screen and play.
 ## Instruments
 
 - **Đàn bầu** — keys 1–7 pluck at harmonic nodes (harmonics 2–8), mouse Y bends
-  the pitch rod, Space = rung, Shift = nhấn, V = vỗ.
+  the pitch rod, Space = rung, Shift = nhấn, V = vỗ. **Esc** or the
+  **Center rod** button returns to neutral pitch and stops gestures without
+  muting the ringing string. Scroll sets pluck strength and position.
 - **Đàn tranh** — keys Z…/ then A…' pluck 16/17/19/21 strings, drag down on a
   string for microtonal press bends, scroll = pluck position, Shift = hard pick.
 

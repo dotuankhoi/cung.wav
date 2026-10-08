@@ -392,6 +392,16 @@ class BauEngine{
     s.active=true; s.qb=0;
   }
   giat(){ this.giT=0; }
+  center(){
+    /* Leave the delay rails, body modes and room tail intact. The rod
+       eases home via its existing smoothing and fractional delays. */
+    this.rodU=0; this.rodV=0; this.grip=true;
+    this.tremOn=false; this.tremT=0; this.giT=-1; this.scoop=0;
+    const G=this.gest;
+    G.rungOn=false; G.rungAmp=0; G.nhanOn=false; G.nx=0; G.nv=0;
+    this.ampMod=1;
+    this.s.fingerFloor=0; this.s.fingerR=0;
+  }
   vo(){
     this.s.damp(2.6,55);
     this.s.pluck(0.28,0.5,0.3,0.8,this.node,2.6);
@@ -623,6 +633,7 @@ class Engine extends AudioWorkletProcessor{
     switch(m.t){
       case 'bauPluck': b.pluck(m.node,m.vel,m.pos,!!m.hold); break;
       case 'bauLift':  b.lift(); break;
+      case 'bauCenter': b.center(); break;
       case 'bauRetouch': b.retouch(m.node); break;
       case 'bauTrem':  b.tremOn=!!m.on; if(!m.on) b.s.fingerFloor=0; break;
       case 'bauGiat':  b.giat(); break;
